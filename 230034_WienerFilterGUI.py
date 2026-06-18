@@ -8,12 +8,13 @@ from scipy.optimize import minimize_scalar
 import matplotlib.pyplot as plt
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
+MAX_DIM = 512
 # ============================================================
-# PAGE CONFIG
+# PAGE CONFIG & CUSTOM STYLING
 # ============================================================
 st.set_page_config(
     page_title="Wiener Filter  — Image Restoration",
-    page_icon="🔬",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -27,7 +28,6 @@ st.markdown("""
 html, body, [class*="st-"] {
     font-family: 'Inter', sans-serif;
 }
-
 
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(135deg, #0a0820 0%, #12103a 40%, #1a1830 100%);
@@ -97,7 +97,6 @@ button[aria-label="Expand sidebar"],
     height: 0 !important;
     overflow: hidden !important;
 }
-
 
 [data-testid="stShortcutLabel"] {
     display: none !important;
@@ -373,6 +372,17 @@ button[aria-label="Expand sidebar"],
 """, unsafe_allow_html=True)
 
 # ============================================================
+# HERO
+# ============================================================
+st.markdown("""
+<div class="hero-wrap">
+    <div class="hero-eyebrow">Image Processing · Wiener Filter</div>
+    <p class="hero-title">Restorasi Gambar</p>
+    <p class="hero-subtitle">Degradasi, restorasi, dan perbandingan secara real-time menggunakan Wiener Filter.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
 # HELPER FUNCTIONS
 # ============================================================
 def convolve2d(im, psf, k_size):
@@ -380,7 +390,6 @@ def convolve2d(im, psf, k_size):
     M, N = im.shape
     freq = fp.fft2(im)
 
-    # Calculate padding needed on each side
     pad_top = (M - k_size) // 2
     pad_bottom = M - k_size - pad_top
     pad_left = (N - k_size) // 2
@@ -390,20 +399,15 @@ def convolve2d(im, psf, k_size):
     freq_kernel = fp.fft2(fp.ifftshift(psf_pad))
     return np.abs(fp.ifft2(freq * freq_kernel))
 
-
 def load_as_gray(uploaded):
     """Load an uploaded image and safely convert to grayscale float64 [0-1]."""
     img = imread(uploaded)
 
-    # Handle different channel configurations
     if img.ndim == 2:
-        # Already grayscale
         gray = img.astype(np.float64)
     elif img.ndim == 3 and img.shape[2] == 4:
-        # RGBA → RGB → Gray
         gray = color.rgb2gray(color.rgba2rgb(img))
     elif img.ndim == 3:
-        # RGB → Gray
         gray = color.rgb2gray(img)
     else:
         raise ValueError(f"Format gambar tidak didukung: shape={img.shape}")
@@ -413,7 +417,6 @@ def load_as_gray(uploaded):
 
     return gray.astype(np.float64)
 
-
 def psnr_badge(psnr):
     """Return an HTML badge colored by PSNR quality."""
     if psnr >= 30:
@@ -422,7 +425,6 @@ def psnr_badge(psnr):
         return '<span class="badge badge-amber">Fair</span>'
     else:
         return '<span class="badge badge-red">Poor</span>'
-
 
 def find_optimal_balance(im_original, im_noisy, psf, search_min=-3.0, search_max=3.0):
     """
@@ -442,11 +444,9 @@ def find_optimal_balance(im_original, im_noisy, psf, search_min=-3.0, search_max
     optimal_psnr = float(-result.fun)
 
     optimal_log = round(optimal_log * 10) / 10
-
     optimal_log = max(search_min, min(search_max, optimal_log))
 
     return optimal_log, optimal_psnr
-
 
 def plot_freq_spec_3d(freq, title="", max_size=64):
     """
@@ -454,7 +454,6 @@ def plot_freq_spec_3d(freq, title="", max_size=64):
     Downsamples to max_size×max_size for rendering performance.
     """
     Z_full = (20 * np.log10(0.01 + np.abs(fp.fftshift(freq)))).real
-
 
     step_y = max(1, Z_full.shape[0] // max_size)
     step_x = max(1, Z_full.shape[1] // max_size)
@@ -471,8 +470,7 @@ def plot_freq_spec_3d(freq, title="", max_size=64):
     ax.zaxis.set_major_locator(LinearLocator(10))
     ax.zaxis.set_major_formatter(FormatStrFormatter("%.0f"))
 
-
-    ax.set_title(title, color="#e0e0ff", fontsize=11, fontweight=600, pad=12)
+    ax.set_title(title, color="#e0e0ff", fontsize=11, fontweight=700, pad=12)
     fig.patch.set_facecolor("#1a1a40")
     ax.set_facecolor("#16163a")
     for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
@@ -491,7 +489,6 @@ def plot_freq_spec_3d(freq, title="", max_size=64):
     plt.tight_layout()
     return fig
 
-
 # ============================================================
 # SESSION STATE INITIALISATION
 # ============================================================
@@ -509,7 +506,6 @@ if "auto_optimized" not in st.session_state:
     st.session_state.auto_optimized = False
 if "file_bytes" not in st.session_state:
     st.session_state.file_bytes = None
-
 
 # ============================================================
 # SIDEBAR CONTROLS
@@ -536,14 +532,15 @@ with st.sidebar:
     st.markdown('<div class="sidebar-group">', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-group-label">Parameter Restorasi</div>', unsafe_allow_html=True)
 
-  
+    # ----------------------------------------------------------
+    # AUTO-OPTIMIZE: detect new upload OR changed degradation params
+    # ----------------------------------------------------------
     needs_optimize = False
 
     if uploaded_file is not None:
         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 
         if file_id != st.session_state.prev_file_id:
-        
             st.session_state.file_bytes = uploaded_file.read()
             needs_optimize = True
             st.session_state.prev_file_id = file_id
@@ -565,18 +562,15 @@ with st.sidebar:
             st.session_state.optimal_psnr = opt_psnr
             st.session_state.auto_optimized = True
 
- 
     if st.session_state.get("pending_reoptimize"):
         st.session_state.log_val = st.session_state.pending_reoptimize["log"]
         st.session_state.optimal_psnr = st.session_state.pending_reoptimize["psnr"]
         st.session_state.auto_optimized = True
         del st.session_state["pending_reoptimize"]
 
-
     log_val = st.slider("Log₁₀ Balance", -3.0, 3.0, step=0.1, key="log_val",
                         help="Kontrol trade-off antara noise suppression dan detail preservation")
     balance_val = 10 ** log_val
-
 
     if st.session_state.auto_optimized and st.session_state.optimal_psnr is not None:
         st.markdown(f"""
@@ -587,7 +581,6 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-  
     if uploaded_file is not None:
         if st.button("Re-optimize Balance", use_container_width=True,
                      help="Cari ulang balance optimal dengan parameter degradasi saat ini"):
@@ -601,7 +594,6 @@ with st.sidebar:
 
                 opt_log, opt_psnr = find_optimal_balance(_img, _noisy, _psf)
 
-          
                 st.session_state.pending_reoptimize = {"log": opt_log, "psnr": opt_psnr}
                 st.rerun()
 
@@ -616,37 +608,77 @@ with st.sidebar:
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 # ============================================================
 # MAIN PROCESSING
 # ============================================================
-
 if uploaded_file is not None and st.session_state.file_bytes is not None:
-    with st.spinner("Memproses gambar — harap tunggu..."):
-        # baca dari bytes cache agar tidak kena closed handle error
+    try:
+      with st.spinner("Memproses gambar — harap tunggu..."):
         im_original = load_as_gray(io.BytesIO(st.session_state.file_bytes))
+        h, w = im_original.shape
+        was_resized = max(h, w) == MAX_DIM
 
-        # Degradasi
         psf = np.ones((kernel_size, kernel_size)) / kernel_size ** 2
         im_blurred = convolve2d(im_original, psf, kernel_size)
 
         rng = np.random.default_rng(42)
-        im_noisy = im_blurred + noise_level * im_original.std() * rng.standard_normal(im_original.shape)
+        std = im_original.std()
+        noise_sigma = noise_level * std if std > 1e-8 else noise_level * 0.1
+        im_noisy = im_blurred + noise_sigma * rng.standard_normal(im_original.shape)
         im_noisy = np.clip(im_noisy, 0, 1)
 
-        # Restorasi
-        im_unsup, _ = restoration.unsupervised_wiener(im_noisy, psf)
-        im_restored = restoration.wiener(im_noisy, psf, balance=balance_val)
+        try:
+            im_unsup, _ = restoration.unsupervised_wiener(im_noisy, psf, clip=True)
+            im_unsup = np.clip(im_unsup, 0, 1)
+        except Exception:
+            im_unsup = im_noisy.copy()
 
-        # Metrik
-        psnr_noisy    = metrics.peak_signal_noise_ratio(im_original, im_noisy)
-        psnr_unsup    = metrics.peak_signal_noise_ratio(im_original, im_unsup)
-        psnr_restored = metrics.peak_signal_noise_ratio(im_original, im_restored)
+        im_restored = np.clip(
+            restoration.wiener(im_noisy, psf, balance=balance_val), 0, 1
+        )
 
-        ssim_noisy    = metrics.structural_similarity(im_original, im_noisy, data_range=1.0)
-        ssim_unsup    = metrics.structural_similarity(im_original, im_unsup, data_range=1.0)
-        ssim_restored = metrics.structural_similarity(im_original, im_restored, data_range=1.0)
+        def safe_psnr(ref, img):
+            try:
+                val = metrics.peak_signal_noise_ratio(ref, img, data_range=1.0)
+                return val if np.isfinite(val) else 0.0
+            except Exception:
+                return 0.0
 
+        def safe_ssim(ref, img):
+            try:
+                val = metrics.structural_similarity(ref, img, data_range=1.0)
+                return val if np.isfinite(val) else 0.0
+            except Exception:
+                return 0.0
+
+        psnr_noisy    = safe_psnr(im_original, im_noisy)
+        psnr_unsup    = safe_psnr(im_original, im_unsup)
+        psnr_restored = safe_psnr(im_original, im_restored)
+
+        ssim_noisy    = safe_ssim(im_original, im_noisy)
+        ssim_unsup    = safe_ssim(im_original, im_unsup)
+        ssim_restored = safe_ssim(im_original, im_restored)
+
+    except Exception as e:
+        st.error(f"Gagal memproses gambar: {e}")
+        st.stop()
+
+    # ----------------------------------------------------------
+    # RESIZE NOTICE
+    # ----------------------------------------------------------
+    if was_resized:
+        h, w = im_original.shape
+        st.markdown(
+            f'''<div class="tip-box" style="margin-bottom:16px;">
+                <strong>Gambar di-resize otomatis ke {w}x{h}px</strong> untuk menjaga performa.
+                Wiener filter bekerja optimal di resolusi ini.
+            </div>''',
+            unsafe_allow_html=True,
+        )
+
+    # ----------------------------------------------------------
+    # METRIC CARDS ROW
+    # ----------------------------------------------------------
     st.markdown('<div class="section-header">Perbandingan Metrik</div>', unsafe_allow_html=True)
 
     m1, m2, m3 = st.columns(3)
@@ -674,7 +706,9 @@ if uploaded_file is not None and st.session_state.file_bytes is not None:
 
     st.markdown('<div style="height: 24px;"></div>', unsafe_allow_html=True)
 
-  
+    # ----------------------------------------------------------
+    # IMAGE GRID
+    # ----------------------------------------------------------
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -702,7 +736,9 @@ if uploaded_file is not None and st.session_state.file_bytes is not None:
                  use_container_width=True, clamp=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-   
+    # ----------------------------------------------------------
+    # 3D FREQUENCY SPECTRUM
+    # ----------------------------------------------------------
     with st.expander("Spektrum Frekuensi 3D", expanded=False):
         st.markdown(
             '<p style="color:#6868a0; font-size:0.85rem; margin-bottom:16px;">'
@@ -729,7 +765,9 @@ if uploaded_file is not None and st.session_state.file_bytes is not None:
             st.pyplot(fig4)
             plt.close(fig4)
 
- 
+    # ----------------------------------------------------------
+    # TIP BOX
+    # ----------------------------------------------------------
     best_psnr = max(psnr_unsup, psnr_restored)
     best_method = "Unsupervised Wiener" if psnr_unsup >= psnr_restored else f"Wiener (Balance {balance_val:.4f})"
 
@@ -742,11 +780,13 @@ if uploaded_file is not None and st.session_state.file_bytes is not None:
     """, unsafe_allow_html=True)
 
 else:
-   
+    # ----------------------------------------------------------
+    # WELCOME STATE
+    # ----------------------------------------------------------
     st.markdown("""
     <div class="welcome-card">
         <div class="welcome-icon"></div>
-        <h2>Wiener Filter</h2>
+        <h2>Wiener Filter Dashboard</h2>
         <p>
             Upload gambar di panel kiri untuk memulai.
             Dashboard ini akan <strong>mendegradasi</strong> gambar dengan blur &amp; noise,
