@@ -1,7 +1,5 @@
-streamlit>=1.45.0
+streamlit==1.42.0
 numpy
 scikit-image
 scipy
 matplotlib
-pillow
- 
